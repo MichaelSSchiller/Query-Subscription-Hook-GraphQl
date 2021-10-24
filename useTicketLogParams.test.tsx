@@ -1,12 +1,49 @@
 import React, { FC } from "react";
 import { renderHook } from "@testing-library/react-hooks";
-import { MemoryRouterProps } from "react-router";
-import { MemoryRouter } from "react-router-dom";
-import useTicketLogParams, { TicketLogParams } from "./useTicketLogParams";
+import { Router } from "react-router-dom";
+import { createMemoryHistory, MemoryHistory } from "history";
+import { advanceTo, clear } from "jest-date-mock";
+import { AccountContext } from "@vitm/components";
+import { testAccount } from "@vitm/testing";
 
-const Wrapper: FC<MemoryRouterProps> = ({ children, initialEntries }) => (
-  <MemoryRouter initialEntries={initialEntries}>{children}</MemoryRouter>
+import useTicketLogParams, {
+  TicketLogParams,
+  useDefaultDateParams,
+} from "./useTicketLogParams";
+
+const defaultDate = "2021-05-04T13:35:12";
+
+beforeEach(() => {
+  advanceTo(new Date(defaultDate));
+});
+
+afterEach(() => {
+  clear();
+});
+
+const Wrapper: FC<{ history: MemoryHistory }> = ({ children, history }) => (
+  <AccountContext.Provider
+    value={{
+      ...testAccount,
+      defaultDate,
+    }}
+  >
+    <Router history={history}>{children}</Router>
+  </AccountContext.Provider>
 );
+
+it("should add startDate and endDate if not already in url params - useDefaultDateParams()", () => {
+  const history = createMemoryHistory({
+    initialEntries: ["/ticketlog/1/1"],
+  });
+
+  renderHook(() => useDefaultDateParams(), {
+    wrapper: Wrapper,
+    initialProps: { history },
+  });
+
+  expect(history.location.search).toEqual(`?ed=1620111600000&sd=1620111600000`);
+});
 
 it.each`
   param              | urlParam | value              | expected
@@ -23,10 +60,13 @@ it.each`
 `(
   "selected param $param should return $expected",
   ({ param, urlParam, value, expected }: TestParams) => {
+    const history = createMemoryHistory({
+      initialEntries: [`/ticketlog/1/1?${urlParam}=${value}`],
+    });
     const { result } = renderHook(() => useTicketLogParams(), {
       wrapper: Wrapper,
       initialProps: {
-        initialEntries: [`/ticketlog/1/1?${urlParam}=${value}`],
+        history,
       },
     });
     expect(result.current[param]).toStrictEqual(expected);
